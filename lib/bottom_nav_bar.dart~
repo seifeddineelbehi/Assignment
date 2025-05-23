@@ -1,0 +1,141 @@
+import 'package:assignment/core/util/palette.dart';
+import 'package:assignment/features/kpis/presentation/screen/kpis_page.dart';
+import 'package:assignment/features/sms/presentation/screen/sms_page.dart';
+import 'package:assignment/features/streaming/presentation/screen/data_page.dart';
+import 'package:assignment/features/voice/presentation/screen/voice_page.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+
+class BottomNavBar extends StatefulWidget {
+  final int? index;
+
+  const BottomNavBar({super.key, this.index});
+
+  @override
+  State<BottomNavBar> createState() => _BottomNavBarState();
+}
+
+class _BottomNavBarState extends State<BottomNavBar>
+    with SingleTickerProviderStateMixin {
+  late TabController tabController;
+  int currentPageIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  @override
+  void initState() {
+    tabController = TabController(length: 4, vsync: this);
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: RepaintBoundary(
+        child: Scaffold(
+          backgroundColor: Palette.backgroundColor,
+          key: _scaffoldKey,
+          bottomNavigationBar: Container(
+            height: 0.10.sh,
+            decoration: BoxDecoration(color: Palette.mainDarkColor),
+            child: TabBar(
+              dividerColor: Colors.transparent,
+              labelColor: Palette.whiteColor,
+              indicatorColor: Colors.transparent,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 0),
+              unselectedLabelColor: Palette.whiteColor.withOpacity(0.5),
+              isScrollable: false,
+              labelStyle: TextStyle(
+                height: 0,
+                fontWeight: FontWeight.w500,
+                fontSize: 14.sp,
+                fontFamily: 'Inter',
+              ),
+              onTap: (index) {
+                setState(() {
+                  currentPageIndex = index;
+                });
+              },
+              controller: tabController,
+              tabs: <Widget>[
+                BottomBarItemWidget(
+                  color:
+                      currentPageIndex == 0
+                          ? Palette.whiteColor
+                          : Palette.whiteColor.withOpacity(0.5),
+                  text: 'Voice',
+                  assetName: "assets/svgs/phone.svg",
+                ),
+                BottomBarItemWidget(
+                  color:
+                      currentPageIndex == 1
+                          ? Palette.whiteColor
+                          : Palette.whiteColor.withOpacity(0.5),
+                  text: 'Data',
+                  assetName: "assets/svgs/video.svg",
+                ),
+                BottomBarItemWidget(
+                  color:
+                      currentPageIndex == 2
+                          ? Palette.whiteColor
+                          : Palette.whiteColor.withOpacity(0.5),
+                  text: 'Sms',
+                  assetName: "assets/svgs/sms.svg",
+                ),
+                BottomBarItemWidget(
+                  color:
+                      currentPageIndex == 3
+                          ? Palette.whiteColor
+                          : Palette.whiteColor.withOpacity(0.5),
+                  text: 'KPIs',
+                  assetName: "assets/svgs/kpi.svg",
+                ),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            controller: tabController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: const [
+              VoicePage(),
+              DataPage(),
+              SmsPage(),
+              KpisPage(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class BottomBarItemWidget extends StatelessWidget {
+  const BottomBarItemWidget({
+    super.key,
+    required this.text,
+    required this.assetName,
+    required this.color,
+  });
+
+  final String text;
+  final String assetName;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 0.16.sw,
+      child: Tab(
+        iconMargin: EdgeInsets.only(bottom: 8.sp),
+        text: text,
+        icon: SvgPicture.asset(
+          assetName,
+          height: 26.sp,
+          width: 26.sp,
+          color: color,
+        ),
+      ),
+    );
+  }
+}

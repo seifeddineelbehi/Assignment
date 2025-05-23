@@ -1,0 +1,34 @@
+package com.rakuten.assignment
+
+import android.accessibilityservice.AccessibilityService
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import android.util.Log
+
+class CallEndAccessibilityService : AccessibilityService() {
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Optional: You can listen for phone call UI here
+    }
+
+    override fun onInterrupt() {
+        Log.d("CallEndService", "Accessibility Service Interrupted")
+    }
+
+    fun endCall() {
+        val rootNode = rootInActiveWindow ?: return
+        findAndClickEndCall(rootNode)
+    }
+
+    private fun findAndClickEndCall(node: AccessibilityNodeInfo?) {
+        if (node == null) return
+
+        if (node.text != null && (node.text.toString().equals("End call", true) || node.contentDescription?.contains("End call", true) == true)) {
+            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            return
+        }
+
+        for (i in 0 until node.childCount) {
+            findAndClickEndCall(node.getChild(i))
+        }
+    }
+}

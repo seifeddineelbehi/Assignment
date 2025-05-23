@@ -1,0 +1,152 @@
+import 'package:assignment/features/voice/presentation/riverpod/voice_provider.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+class VoicePage extends ConsumerStatefulWidget {
+  const VoicePage({super.key});
+
+  @override
+  ConsumerState<VoicePage> createState() => _VoicePageState();
+}
+
+class _VoicePageState extends ConsumerState<VoicePage> {
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _durationController = TextEditingController();
+  late final VoiceNotifier _notifier;
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _durationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    _notifier = ref.read(voiceProvider.notifier);
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final voiceState = ref.watch(voiceProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Voice Service')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Call Section
+            const Text(
+              'Voice Call',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            TextField(
+              controller: _phoneController,
+              decoration: const InputDecoration(
+                labelText: 'Receiver Phone Number',
+                hintText: 'e.g., +1234567890',
+              ),
+              keyboardType: TextInputType.phone,
+            ),
+            TextField(
+              controller: _durationController,
+              decoration: const InputDecoration(
+                labelText: 'Call Duration (mins)',
+                hintText: 'e.g., 5',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                final phoneNumber = _phoneController.text.trim();
+                final durationText = _durationController.text.trim();
+
+                if (phoneNumber.isEmpty || durationText.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill all fields')),
+                  );
+                  return;
+                }
+
+                final duration = int.tryParse(durationText) ?? 0;
+                if (duration <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid duration'),
+                    ),
+                  );
+                  return;
+                }
+
+                _notifier.makeCall(phoneNumber, duration);
+              },
+              child: const Text('Make Call'),
+            ),
+
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      title: const Text('KPIs'),
+                      content: SizedBox(
+                        width: 0.9.sw,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children:
+                                {
+                                  'Termination Reason':
+                                      voiceState.terminationReason,
+                                  'Call Duration': voiceState.callDuration,
+                                  'Service State': voiceState.serviceState,
+                                  'Phone Number': voiceState.number,
+                                  'Number Of Minutes': voiceState.numberOfMinutes,
+                                }.entries.map((entry) {
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          entry.key,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Flexible(child: Text(entry.value)),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                          ),
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+              child: const Text('Show Voice KPIs'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

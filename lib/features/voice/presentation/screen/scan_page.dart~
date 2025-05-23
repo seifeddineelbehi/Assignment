@@ -1,0 +1,172 @@
+import 'dart:async';
+
+import 'package:another_telephony/telephony.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+
+class VoicePage extends StatefulWidget {
+  const VoicePage({super.key});
+
+  @override
+  State<VoicePage> createState() => _VoicePageState();
+}
+
+class _VoicePageState extends State<VoicePage> {
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _durationController = TextEditingController();
+  final Telephony telephony = Telephony.instance;
+
+  // KPI tracking
+  Map<String, String> kpis = {
+    'Last Action': 'None',
+    'Termination Reason': 'N/A',
+    'Quality of Service': 'N/A',
+    'Data Speed': 'N/A',
+    'Call Duration': 'N/A',
+    'SMS Status': 'N/A',
+    'Network Type': 'N/A',
+    'Connection Type': 'N/A',
+  };
+
+  Timer? _callTimer;
+  int _remainingSeconds = 0;
+
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _durationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _makeCall(String phoneNumber, int durationMins) async {
+    setState(() {
+      kpis['Last Action'] = 'Voice Call';
+      kpis['Call Duration'] = '0/${durationMins} mins';
+      _remainingSeconds = durationMins * 60;
+    });
+
+    // Start the timer for call duration tracking
+    _callTimer?.cancel();
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        if (_remainingSeconds > 0) {
+          _remainingSeconds -= 1;
+          int mins = _remainingSeconds ~/ 60;
+          int secs = _remainingSeconds % 60;
+          kpis['Termination Reason'] = 'aaaaaaa';
+          kpis['Call Duration'] =
+          '${durationMins - mins - (secs > 0 ? 1 : 0)}:${secs.toString().padLeft(2, '0')}/${durationMins} mins';
+        } else {
+          _callTimer?.cancel();
+          kpis['Termination Reason'] = 'Duration Completed';
+          kpis['Call Duration'] = '$durationMins/$durationMins mins';
+        }
+      });
+    });
+
+    try {
+      // Initiate the call using telephony package
+      await telephony.dialPhoneNumber(phoneNumber);
+      // backgroundCallHandler(phoneNumber);
+      Timer(Duration(seconds: 5), () {
+        print("aaaaaaaaaaaaaaaaaaaaaaaa");
+      });
+      setState(() {
+        kpis['Quality of Service'] = 'Call Connected';
+      });
+    } catch (e) {
+      setState(() {
+        kpis['Termination Reason'] = 'Error: $e';
+        print('Error: $e');
+        kpis['Quality of Service'] = 'Failed';
+        _callTimer?.cancel();
+      });
+    }
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Telephony Services App'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Call Section
+            const Text('Voice Call',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            TextField(
+              controller: _phoneController,
+              decoration: const InputDecoration(
+                labelText: 'Receiver Phone Number',
+                hintText: 'e.g., +1234567890',
+              ),
+              keyboardType: TextInputType.phone,
+            ),
+            TextField(
+              controller: _durationController,
+              decoration: const InputDecoration(
+                labelText: 'Call Duration (mins)',
+                hintText: 'e.g., 5',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                final phoneNumber = _phoneController.text.trim();
+                final durationText = _durationController.text.trim();
+
+                if (phoneNumber.isEmpty || durationText.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill all fields')),
+                  );
+                  return;
+                }
+
+                final duration = int.tryParse(durationText) ?? 0;
+                if (duration <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Please enter a valid duration')),
+                  );
+                  return;
+                }
+
+                _makeCall(phoneNumber, duration);
+              },
+              child: const Text('Make Call'),
+            ),
+
+            const Divider(height: 32),
+
+            // KPIs Section
+            const Text('KPIs',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...kpis.entries.map((entry) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(entry.key,
+                      style: const TextStyle(fontWeight: FontWeight.w500)),
+                  Text(entry.value),
+                ],
+              ),
+            ),),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

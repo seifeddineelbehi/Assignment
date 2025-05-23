@@ -1,0 +1,228 @@
+import 'dart:async';
+
+import 'package:another_telephony/telephony.dart';
+import 'package:assignment/features/streaming/presentation/riverpod/streaming_state.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+
+final streamingProvider =
+    StateNotifierProvider<StreamingNotifier, StreamingState>((ref) {
+      return StreamingNotifier();
+    });
+
+class StreamingNotifier extends StateNotifier<StreamingState> {
+  StreamingNotifier() : super(const StreamingState());
+
+  final Telephony _telephony = Telephony.instance;
+  static const _platform = MethodChannel('com.rakuten.dataUsage');
+  YoutubePlayerController? controller;
+  Timer? _speedTimer;
+  Timer? _timer;
+  bool _hasShownDataLimitDialog = false;
+  bool isMobileConnection = false;
+  int _speedBytes = 0;
+  int _bytes = 0;
+  int? dataVolume;
+  String? youtubeLink;
+  BuildContext? context;
+
+  void setDataVolume(int? value) {
+    dataVolume = value;
+  }
+
+  void setYoutubeLink(String? value) {
+    youtubeLink = value;
+  }
+
+  void setContext(BuildContext? value) {
+    context = value;
+  }
+
+  void setHasShownDataLimitDialog(bool value) {
+    _hasShownDataLimitDialog = value;
+  }
+
+  Future<int> _getMobileDataUsage() async {
+    try {
+      return await _platform.invokeMethod('getMobileDataUsage');
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // Updates connection status based on connectivity results;
+  void updateConnectionStatus(List<ConnectivityResult> results) {
+    String connectionType;
+
+    if (results.contains(ConnectivityResult.mobile)) {
+      connectionType = 'Cellular (4G/5G)';
+      isMobileConnection = true;
+      initializeYoutubePlayer(context!);
+    } else if (results.contains(ConnectivityResult.wifi)) {
+      connectionType = 'WiFi';
+      isMobileConnection = false;
+      if (controller != null) {
+        if (controller!.value.isPlaying) {
+          controller!.pause();
+        }
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDialog(
+          context: context!,
+          builder:
+              (dialogContext) => AlertDialog(
+                title: const Text("Mobile Data Required"),
+                content: const Text(
+                  "Please connect to cellular (4G/5G) to stream.",
+                ),
+                actions: [
+                  TextButton(
+                    onPressed:
+                        () => Navigator.pop(
+                          dialogContext,
+                        ), // Use dialogContext here
+                    child: const Text("OK"),
+                  ),
+                ],
+              ),
+        );
+      });
+    } else {
+      connectionType = 'None';
+      isMobileConnection = false;
+      if (controller != null) {
+        if (controller!.value.isPlaying) {
+          controller!.pause();
+        }
+      }
+    }
+    state = state.copyWith(connectionType: connectionType);
+  }
+
+  void initializeYoutubePlayer(BuildContext context) {
+    final videoId = YoutubePlayer.convertUrlToId(youtubeLink!);
+
+    if (videoId == null) return;
+
+    controller = YoutubePlayerController(
+      initialVideoId: videoId,
+      flags: const YoutubePlayerFlags(autoPlay: true, mute: false),
+    );
+
+    startMonitoring();
+  }
+
+  // Monitors the mobile data transfer speed every second and updates max speed in state
+  void startMonitoringSpeed() async {
+    _speedBytes = await _getMobileDataUsage();
+    double maxDataSpeed = 0;
+    _speedTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (isMobileConnection) {
+        final int currentBytes = await _getMobileDataUsage();
+        final int deltaBytes = currentBytes - _speedBytes;
+        _speedBytes = currentBytes;
+
+        final double speedKbps = deltaBytes / 1024;
+        if (speedKbps > maxDataSpeed) {
+          maxDataSpeed = speedKbps;
+        }
+        state = state.copyWith(
+          dataSpeed: "${speedKbps.toStringAsFixed(2)} KB/s",
+          maxDataSpeed: "${maxDataSpeed.toStringAsFixed(2)} KB/s",
+        );
+      } else {
+        state = state.copyWith(dataSpeed: "${0.toStringAsFixed(2)} KB/s");
+      }
+    });
+  }
+
+  // Periodically monitors total mobile data usage, pauses video and shows alert when data limit is reached
+  Future<void> startMonitoring() async {
+    _bytes = await _getMobileDataUsage();
+
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (isMobileConnection) {
+        int currentBytes = await _getMobileDataUsage();
+        int usedBytes = currentBytes - _bytes;
+        double usedMB = usedBytes / (1024 * 1024);
+        state = state.copyWith(
+          volumeUsage: "${usedMB.toStringAsFixed(2)}/$dataVolume",
+        );
+
+        if (usedMB >= dataVolume! && !_hasShownDataLimitDialog) {
+          _hasShownDataLimitDialog = true; // Set flag to true
+
+          controller!.pause();
+          _timer!.cancel();
+          state = state.copyWith(isPaused: true);
+          if (context != null) {
+            showDialog(
+              barrierDismissible: false,
+              context: context!,
+              builder:
+                  (dialogContext) => AlertDialog(
+                    title: const Text("Data Limit Reached"),
+                    content: Text(
+                      "You have used ${dataVolume}MB of mobile data.",
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(dialogContext);
+                          Navigator.pop(context!);
+                        },
+                        child: const Text("OK"),
+                      ),
+                    ],
+                  ),
+            );
+          }
+        }
+      }
+    });
+  }
+
+  void disposeStreaming() {
+    _speedTimer?.cancel();
+    _timer?.cancel();
+    _timer?.cancel();
+    controller?.dispose();
+    controller = null;
+  }
+
+  // Retrieves current network type from telephony API and updates the state with a human-readable string
+  Future<void> updateNetworkTypeKPI() async {
+    final networkType = await _telephony.dataNetworkType;
+
+    String networkTypeStr;
+    switch (networkType) {
+      case NetworkType.LTE:
+        networkTypeStr = '4G (LTE)';
+        break;
+      case NetworkType.LTE_CA:
+        networkTypeStr = '4G+ (LTE-Advanced)';
+        break;
+      case NetworkType.NR:
+        networkTypeStr = '5G (NR)';
+        break;
+      case NetworkType.HSDPA:
+      case NetworkType.HSUPA:
+      case NetworkType.HSPA:
+      case NetworkType.HSPAP:
+        networkTypeStr = '3G (HSPA)';
+        break;
+      case NetworkType.GPRS:
+      case NetworkType.EDGE:
+        networkTypeStr = '2G (GPRS/EDGE)';
+        break;
+      default:
+        networkTypeStr = networkType.toString().split('.').last;
+    }
+
+    state = state.copyWith(networkType: networkTypeStr);
+  }
+}

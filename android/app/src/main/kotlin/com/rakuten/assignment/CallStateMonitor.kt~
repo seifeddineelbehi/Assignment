@@ -1,0 +1,4 @@
+package com.rakuten.assignment
+
+class CallStateMonitor {
+}
