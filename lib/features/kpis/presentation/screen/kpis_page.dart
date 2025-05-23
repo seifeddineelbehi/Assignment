@@ -24,7 +24,7 @@ class _KpisPageState extends ConsumerState<KpisPage> {
     final voiceState = ref.watch(voiceProvider);
     final smsState = ref.watch(smsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Telephony Services App')),
+      appBar: AppBar(title: const Text('KPIs')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
